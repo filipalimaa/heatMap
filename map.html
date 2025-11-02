@@ -6,13 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <!-- HERE Maps JS -->
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-core.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-service.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-data.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-heatmap.js"></script>
-  <link rel="stylesheet" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-core.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-service.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-data.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-heatmap.js" type="text/javascript" charset="utf-8"></script>
+  <link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
 
   <style>
     html, body {
@@ -56,24 +56,32 @@
   <script>
     // Inicialização do HERE Maps
     var platform = new H.service.Platform({
-      apikey: "gCsr9J1ANV4ejQht7wRVfUaKCi6MqloJUxjZJQqzC-E"   // <-- substitui aqui pela tua API key
+      apikey: "YOUR_HERE_API_KEY"   // <-- substitui pela tua chave real
     });
 
     var defaultLayers = platform.createDefaultLayers();
+
+    // Usa raster normal map (compatível em qualquer browser)
     var map = new H.Map(
       document.getElementById('mapContainer'),
-      defaultLayers.vector.normal.map,
+      defaultLayers.raster.normal.map,
       {
         zoom: 6,
         center: { lat: 39.5, lng: -8.0 }
       }
     );
 
-    // Interações e UI padrão
+    // Controlo de interação
     var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
     var ui = H.ui.UI.createDefault(map, defaultLayers);
 
-    // --- LER DADOS DO APP QUERY PARAM ---
+    // Fallback se a camada vector falhar
+    if (!map.getBaseLayer()) {
+      console.warn("Camada vectorial não carregada. A usar raster como fallback.");
+      map.setBaseLayer(defaultLayers.raster.normal.map);
+    }
+
+    // --- Ler dados do parâmetro 'data' ---
     const params = new URLSearchParams(window.location.search);
     const dataParam = params.get("data");
 
@@ -90,14 +98,15 @@
         const heatmapPoints = data.map(d => ({
           lat: d.lat,
           lng: d.lng,
-          value: d.total_vendas
+          value: d.total_vendas,
+          location: d.location || "Local desconhecido"
         }));
 
-        // Normalizar valores (para escalar 0-1)
+        // Normalizar os valores
         const maxValue = Math.max(...heatmapPoints.map(p => p.value));
         heatmapPoints.forEach(p => p.value = p.value / maxValue);
 
-        // Criar o heatmap provider com cores refinadas
+        // Criar Heatmap Provider
         const heatmapProvider = new H.data.heatmap.Provider({
           colors: new H.data.heatmap.Colors({
             0.0: 'rgba(0,0,255,0)',     // sem dados
@@ -115,11 +124,41 @@
         const heatmapLayer = new H.map.layer.TileLayer(heatmapProvider);
         map.addLayer(heatmapLayer);
 
-        // Ajustar o zoom automaticamente aos pontos
+        // Adicionar círculos interativos por ponto
+        heatmapPoints.forEach(p => {
+          const circle = new H.map.Circle(
+            { lat: p.lat, lng: p.lng },
+            1500, // raio em metros
+            {
+              style: {
+                fillColor: 'rgba(255,0,0,0.2)',
+                strokeColor: 'rgba(255,0,0,0.5)',
+                lineWidth: 2
+              }
+            }
+          );
+
+          // Tooltip
+          circle.setData(`<b>${p.location}</b><br>Vendas: ${Math.round(p.value * maxValue)}`);
+          circle.addEventListener('tap', evt => {
+            const bubble = new H.ui.InfoBubble(evt.target.getGeometry(), {
+              content: evt.target.getData()
+            });
+            ui.addBubble(bubble);
+          });
+
+          map.addObject(circle);
+        });
+
+        // Centragem automática no conjunto de pontos
         if (heatmapPoints.length > 1) {
-          const bounds = heatmapPoints.reduce((b, p) => b.extend({ lat: p.lat, lng: p.lng }),
-            new H.geo.Rect(heatmapPoints[0].lat, heatmapPoints[0].lng,
-                           heatmapPoints[0].lat, heatmapPoints[0].lng));
+          const bounds = heatmapPoints.reduce(
+            (b, p) => b.extend({ lat: p.lat, lng: p.lng }),
+            new H.geo.Rect(
+              heatmapPoints[0].lat, heatmapPoints[0].lng,
+              heatmapPoints[0].lat, heatmapPoints[0].lng
+            )
+          );
           map.getViewModel().setLookAtData({ bounds });
         }
 

@@ -1,67 +1,159 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt">
 <head>
   <meta charset="utf-8">
-  <title>Heatmap HERE Maps</title>
+  <title>Mapa de Calor - Vendas por Localidade</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-core.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-service.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-data.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-heatmap.js"></script>
+
+  <!-- HERE Maps -->
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-core.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-service.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-data.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-heatmap.js" type="text/javascript" charset="utf-8"></script>
   <link rel="stylesheet" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
+
   <style>
-    html, body { width: 100%; height: 100%; margin: 0; }
-    #mapContainer { width: 100%; height: 100%; }
+    html, body { margin:0; height:100%; width:100%; background:#f4f4f4; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    #mapContainer { width:100%; height:100vh; }
+    .legend {
+      position:absolute; bottom:10px; left:10px; background:rgba(255,255,255,.92);
+      padding:8px 12px; border-radius:8px; font-size:13px; box-shadow:0 2px 4px rgba(0,0,0,.2);
+    }
+    .legend span { display:inline-block; width:15px; height:10px; margin-right:4px; }
   </style>
 </head>
 <body>
   <div id="mapContainer"></div>
+  <div class="legend">
+    <strong>Intensidade das Vendas</strong><br>
+    <span style="background:blue"></span> Baixa
+    <span style="background:yellow"></span> Média
+    <span style="background:red"></span> Alta
+  </div>
+
   <script>
-    // substitui pela tua chave HERE Maps
+    // ===== Helpers =====
+    function decodeBase64ToUtf8(b64) {
+      try { return decodeURIComponent(escape(window.atob(b64))); } catch(e) { return atob(b64); }
+    }
+    function parseIncomingData() {
+      const p = new URLSearchParams(window.location.search);
+      const b64 = p.get("data_b64");
+      const raw = p.get("data");
+      let txt = "[]";
+      try {
+        if (b64) txt = decodeBase64ToUtf8(b64);
+        else if (raw) txt = decodeURIComponent(raw);
+      } catch (e) {
+        console.error("Erro ao decodificar parâmetros:", e, { b64, raw });
+      }
+      try {
+        const arr = JSON.parse(txt);
+        if (Array.isArray(arr)) return arr;
+      } catch (e) {
+        console.error("JSON inválido:", e, txt);
+      }
+      return [];
+    }
+
+    // ===== HERE Maps init =====
     var platform = new H.service.Platform({
-      apikey: "gCsr9J1ANV4ejQht7wRVfUaKCi6MqloJUxjZJQqzC-E"
+      apikey: "YOUR_HERE_API_KEY" // <-- coloca aqui a tua API key
     });
 
-    var defaultLayers = platform.createDefaultLayers();
+    function makeMapBase(container) {
+      try {
+        const layers = platform.createDefaultLayers();
+        // tenta vector
+        const map = new H.Map(container, layers.vector.normal.map, {
+          zoom: 6, center: { lat: 39.5, lng: -8.0 }, pixelRatio: window.devicePixelRatio || 1
+        });
+        if (!map.getBaseLayer()) throw new Error("Vector base layer not available");
+        return map;
+      } catch (e) {
+        console.warn("Vector falhou, a tentar raster:", e);
+        try {
+          const layers = platform.createDefaultLayers();
+          const map = new H.Map(container, layers.raster.normal.map, {
+            zoom: 6, center: { lat: 39.5, lng: -8.0 }, pixelRatio: window.devicePixelRatio || 1
+          });
+          if (!map.getBaseLayer()) throw new Error("Raster base layer not available");
+          return map;
+        } catch (e2) {
+          console.warn("Raster HERE falhou, fallback OSM:", e2);
+          // Fallback público OSM (garante que pelo menos o basemap aparece)
+          const osmProvider = new H.map.provider.ImageTileProvider({
+            label: 'OSM', min: 0, max: 19,
+            getURL: function (col, row, level) {
+              return `https://tile.openstreetmap.org/${level}/${col}/${row}.png`;
+            }
+          });
+          const osmLayer = new H.map.layer.TileLayer(osmProvider);
+          return new H.Map(container, osmLayer, {
+            zoom: 6, center: { lat: 39.5, lng: -8.0 }, pixelRatio: window.devicePixelRatio || 1
+          });
+        }
+      }
+    }
 
-    var map = new H.Map(document.getElementById('mapContainer'),
-      defaultLayers.vector.normal.map, {
-        zoom: 6,
-        center: { lat: 39.5, lng: -8.0 } // centro de Portugal
+    const map = makeMapBase(document.getElementById('mapContainer'));
+    window.addEventListener('resize', () => map.getViewPort().resize());
+    const behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+    const ui = H.ui.UI.createDefault(map);
+
+    // ===== Dados =====
+    const data = parseIncomingData(); // [{lat,lng,total_vendas,location?}, ...]
+    if (!data.length) {
+      console.warn("Sem dados para exibir. Verifica a construção do URL.");
+    } else {
+      // transforma
+      const pts = data.map(d => ({
+        lat: Number(d.lat),
+        lng: Number(d.lng),
+        value: Number(d.total_vendas || d.value || 0),
+        location: d.location || "Local"
+      })).filter(p => isFinite(p.lat) && isFinite(p.lng));
+
+      const maxVal = Math.max(1, ...pts.map(p => p.value));
+      const hmPoints = pts.map(p => ({ lat: p.lat, lng: p.lng, value: p.value / maxVal }));
+
+      // Heatmap
+      const hmProvider = new H.data.heatmap.Provider({
+        colors: new H.data.heatmap.Colors({
+          0.0: 'rgba(0,0,255,0)',     // transparente sem dados
+          0.3: 'rgba(0,255,255,0.6)',
+          0.5: 'rgba(255,255,0,0.7)',
+          0.7: 'rgba(255,165,0,0.8)',
+          1.0: 'rgba(255,0,0,0.9)'
+        }),
+        opacity: 0.85,
+        type: 'value',
+        assumeValues: false
+      });
+      hmProvider.addData(hmPoints);
+      map.addLayer(new H.map.layer.TileLayer(hmProvider));
+
+      // Círculos + tooltip
+      pts.forEach(p => {
+        const circle = new H.map.Circle({ lat: p.lat, lng: p.lng }, 1500, {
+          style: { fillColor: 'rgba(255,0,0,0.2)', strokeColor: 'rgba(255,0,0,0.5)', lineWidth: 2 }
+        });
+        circle.setData(`<b>${p.location}</b><br>Vendas: ${p.value}`);
+        circle.addEventListener('tap', evt => {
+          ui.addBubble(new H.ui.InfoBubble(evt.target.getGeometry(), { content: evt.target.getData() }));
+        });
+        map.addObject(circle);
       });
 
-    // Enable map interactions
-    var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
-    var ui = H.ui.UI.createDefault(map, defaultLayers);
-
-    // === Dados recebidos do Appsmith ===
-    const params = new URLSearchParams(window.location.search);
-    const data = JSON.parse(decodeURIComponent(params.get("data")));
-
-    // Converter para pontos de calor
-    const heatmapData = data.map(item => ({
-      lat: item.lat,
-      lng: item.lng,
-      value: item.total_vendas
-    }));
-
-    // Criar heatmap layer
-    const heatmapProvider = new H.data.heatmap.Provider({
-      colors: new H.data.heatmap.Colors({
-        0.0: 'blue',
-        0.5: 'yellow',
-        1.0: 'red'
-      }),
-      opacity: 0.7,
-      assumeValues: true
-    });
-
-    heatmapProvider.addData(heatmapData);
-    const heatmapLayer = new H.map.layer.TileLayer(heatmapProvider);
-
-    map.addLayer(heatmapLayer);
+      // Ajusta ao conjunto
+      if (pts.length) {
+        const bounds = pts.reduce((b, p) => b.extend({ lat: p.lat, lng: p.lng }),
+          new H.geo.Rect(pts[0].lat, pts[0].lng, pts[0].lat, pts[0].lng));
+        map.getViewModel().setLookAtData({ bounds, margin: 40 });
+      }
+    }
   </script>
 </body>
 </html>

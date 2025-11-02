@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Heatmap HERE Maps</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-core.js"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-service.js"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-data.js"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-heatmap.js"></script>
+  <link rel="stylesheet" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
+  <style>
+    html, body { width: 100%; height: 100%; margin: 0; }
+    #mapContainer { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="mapContainer"></div>
+  <script>
+    // substitui pela tua chave HERE Maps
+    var platform = new H.service.Platform({
+      apikey: "gCsr9J1ANV4ejQht7wRVfUaKCi6MqloJUxjZJQqzC-E"
+    });
+
+    var defaultLayers = platform.createDefaultLayers();
+
+    var map = new H.Map(document.getElementById('mapContainer'),
+      defaultLayers.vector.normal.map, {
+        zoom: 6,
+        center: { lat: 39.5, lng: -8.0 } // centro de Portugal
+      });
+
+    // Enable map interactions
+    var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+    var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+    // === Dados recebidos do Appsmith ===
+    const params = new URLSearchParams(window.location.search);
+    const data = JSON.parse(decodeURIComponent(params.get("data")));
+
+    // Converter para pontos de calor
+    const heatmapData = data.map(item => ({
+      lat: item.lat,
+      lng: item.lng,
+      value: item.total_vendas
+    }));
+
+    // Criar heatmap layer
+    const heatmapProvider = new H.data.heatmap.Provider({
+      colors: new H.data.heatmap.Colors({
+        0.0: 'blue',
+        0.5: 'yellow',
+        1.0: 'red'
+      }),
+      opacity: 0.7,
+      assumeValues: true
+    });
+
+    heatmapProvider.addData(heatmapData);
+    const heatmapLayer = new H.map.layer.TileLayer(heatmapProvider);
+
+    map.addLayer(heatmapLayer);
+  </script>
+</body>
+</html>

@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt">
 <head>
   <meta charset="utf-8">
-  <title>Heatmap HERE Maps</title>
+  <title>Mapa de Calor - Vendas por Localidade</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- HERE Maps JS -->
   <script src="https://js.api.here.com/v3/3.1/mapsjs-core.js"></script>
   <script src="https://js.api.here.com/v3/3.1/mapsjs-service.js"></script>
   <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js"></script>
@@ -11,57 +13,122 @@
   <script src="https://js.api.here.com/v3/3.1/mapsjs-data.js"></script>
   <script src="https://js.api.here.com/v3/3.1/mapsjs-heatmap.js"></script>
   <link rel="stylesheet" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
+
   <style>
-    html, body { width: 100%; height: 100%; margin: 0; }
-    #mapContainer { width: 100%; height: 100%; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      width: 100%;
+      background: #f4f4f4;
+      font-family: "Segoe UI", Roboto, sans-serif;
+    }
+    #mapContainer {
+      width: 100%;
+      height: 100vh;
+    }
+    .legend {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.9);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .legend span {
+      display: inline-block;
+      width: 15px;
+      height: 10px;
+      margin-right: 4px;
+    }
   </style>
 </head>
 <body>
   <div id="mapContainer"></div>
+  <div class="legend">
+    <strong>Intensidade das Vendas</strong><br>
+    <span style="background:blue"></span> Baixa
+    <span style="background:yellow"></span> Média
+    <span style="background:red"></span> Alta
+  </div>
+
   <script>
-    // substitui pela tua chave HERE Maps
+    // Inicialização do HERE Maps
     var platform = new H.service.Platform({
-      apikey: "gCsr9J1ANV4ejQht7wRVfUaKCi6MqloJUxjZJQqzC-E"
+      apikey: "gCsr9J1ANV4ejQht7wRVfUaKCi6MqloJUxjZJQqzC-E"   // <-- substitui aqui pela tua API key
     });
 
     var defaultLayers = platform.createDefaultLayers();
-
-    var map = new H.Map(document.getElementById('mapContainer'),
-      defaultLayers.vector.normal.map, {
+    var map = new H.Map(
+      document.getElementById('mapContainer'),
+      defaultLayers.vector.normal.map,
+      {
         zoom: 6,
-        center: { lat: 39.5, lng: -8.0 } // centro de Portugal
-      });
+        center: { lat: 39.5, lng: -8.0 }
+      }
+    );
 
-    // Enable map interactions
+    // Interações e UI padrão
     var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
     var ui = H.ui.UI.createDefault(map, defaultLayers);
 
-    // === Dados recebidos do Appsmith ===
+    // --- LER DADOS DO APP QUERY PARAM ---
     const params = new URLSearchParams(window.location.search);
-    const data = JSON.parse(decodeURIComponent(params.get("data")));
+    const dataParam = params.get("data");
 
-    // Converter para pontos de calor
-    const heatmapData = data.map(item => ({
-      lat: item.lat,
-      lng: item.lng,
-      value: item.total_vendas
-    }));
+    if (dataParam) {
+      try {
+        const data = JSON.parse(decodeURIComponent(dataParam));
 
-    // Criar heatmap layer
-    const heatmapProvider = new H.data.heatmap.Provider({
-      colors: new H.data.heatmap.Colors({
-        0.0: 'blue',
-        0.5: 'yellow',
-        1.0: 'red'
-      }),
-      opacity: 0.7,
-      assumeValues: true
-    });
+        if (!Array.isArray(data) || data.length === 0) {
+          console.warn("Sem dados de vendas para exibir.");
+          return;
+        }
 
-    heatmapProvider.addData(heatmapData);
-    const heatmapLayer = new H.map.layer.TileLayer(heatmapProvider);
+        // Converter para pontos {lat, lng, value}
+        const heatmapPoints = data.map(d => ({
+          lat: d.lat,
+          lng: d.lng,
+          value: d.total_vendas
+        }));
 
-    map.addLayer(heatmapLayer);
+        // Normalizar valores (para escalar 0-1)
+        const maxValue = Math.max(...heatmapPoints.map(p => p.value));
+        heatmapPoints.forEach(p => p.value = p.value / maxValue);
+
+        // Criar o heatmap provider com cores refinadas
+        const heatmapProvider = new H.data.heatmap.Provider({
+          colors: new H.data.heatmap.Colors({
+            0.0: 'rgba(0,0,255,0)',     // sem dados
+            0.3: 'rgba(0,255,255,0.6)', // ciano
+            0.5: 'rgba(255,255,0,0.7)', // amarelo
+            0.7: 'rgba(255,165,0,0.8)', // laranja
+            1.0: 'rgba(255,0,0,0.9)'    // vermelho intenso
+          }),
+          opacity: 0.85,
+          type: 'value',
+          assumeValues: false
+        });
+
+        heatmapProvider.addData(heatmapPoints);
+        const heatmapLayer = new H.map.layer.TileLayer(heatmapProvider);
+        map.addLayer(heatmapLayer);
+
+        // Ajustar o zoom automaticamente aos pontos
+        if (heatmapPoints.length > 1) {
+          const bounds = heatmapPoints.reduce((b, p) => b.extend({ lat: p.lat, lng: p.lng }),
+            new H.geo.Rect(heatmapPoints[0].lat, heatmapPoints[0].lng,
+                           heatmapPoints[0].lat, heatmapPoints[0].lng));
+          map.getViewModel().setLookAtData({ bounds });
+        }
+
+      } catch (err) {
+        console.error("Erro ao processar os dados:", err);
+      }
+    } else {
+      console.warn("Nenhum parâmetro 'data' recebido.");
+    }
   </script>
 </body>
 </html>

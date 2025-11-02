@@ -36,8 +36,23 @@
   <script>
     // ===== Helpers =====
     function decodeBase64ToUtf8(b64) {
-      try { return decodeURIComponent(escape(window.atob(b64))); } catch(e) { return atob(b64); }
+        try {
+            return decodeURIComponent(escape(window.atob(b64)));
+        } catch (e) {
+            try {
+            // alternativa moderna (quando escape não existe)
+            return decodeURIComponent(
+                Array.prototype.map.call(atob(b64), c => 
+                '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+                ).join('')
+            );
+            } catch (err) {
+            console.error("Falha ao decodificar Base64:", err);
+            return "[]";
+        }
     }
+}
+
     function parseIncomingData() {
       const p = new URLSearchParams(window.location.search);
       const b64 = p.get("data_b64");

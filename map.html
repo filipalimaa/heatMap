@@ -5,43 +5,23 @@
   <title>Mapa de Calor - Vendas por Localidade</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- HERE Maps JS -->
+  <!-- HERE Maps -->
   <script src="https://js.api.here.com/v3/3.1/mapsjs-core.js" type="text/javascript" charset="utf-8"></script>
   <script src="https://js.api.here.com/v3/3.1/mapsjs-service.js" type="text/javascript" charset="utf-8"></script>
   <script src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js" type="text/javascript" charset="utf-8"></script>
   <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js" type="text/javascript" charset="utf-8"></script>
   <script src="https://js.api.here.com/v3/3.1/mapsjs-data.js" type="text/javascript" charset="utf-8"></script>
   <script src="https://js.api.here.com/v3/3.1/mapsjs-heatmap.js" type="text/javascript" charset="utf-8"></script>
-  <link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
+  <link rel="stylesheet" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
 
   <style>
-    html, body {
-      margin: 0;
-      height: 100%;
-      width: 100%;
-      background: #f4f4f4;
-      font-family: "Segoe UI", Roboto, sans-serif;
-    }
-    #mapContainer {
-      width: 100%;
-      height: 100vh;
-    }
+    html, body { margin:0; height:100%; width:100%; background:#f4f4f4; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    #mapContainer { width:100%; height:100vh; }
     .legend {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      background: rgba(255,255,255,0.9);
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-size: 13px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      position:absolute; bottom:10px; left:10px; background:rgba(255,255,255,.92);
+      padding:8px 12px; border-radius:8px; font-size:13px; box-shadow:0 2px 4px rgba(0,0,0,.2);
     }
-    .legend span {
-      display: inline-block;
-      width: 15px;
-      height: 10px;
-      margin-right: 4px;
-    }
+    .legend span { display:inline-block; width:15px; height:10px; margin-right:4px; }
   </style>
 </head>
 <body>
@@ -54,119 +34,125 @@
   </div>
 
   <script>
-    // Inicialização do HERE Maps
+    // ===== Helpers =====
+    function decodeBase64ToUtf8(b64) {
+      try { return decodeURIComponent(escape(window.atob(b64))); } catch(e) { return atob(b64); }
+    }
+    function parseIncomingData() {
+      const p = new URLSearchParams(window.location.search);
+      const b64 = p.get("data_b64");
+      const raw = p.get("data");
+      let txt = "[]";
+      try {
+        if (b64) txt = decodeBase64ToUtf8(b64);
+        else if (raw) txt = decodeURIComponent(raw);
+      } catch (e) {
+        console.error("Erro ao decodificar parâmetros:", e, { b64, raw });
+      }
+      try {
+        const arr = JSON.parse(txt);
+        if (Array.isArray(arr)) return arr;
+      } catch (e) {
+        console.error("JSON inválido:", e, txt);
+      }
+      return [];
+    }
+
+    // ===== HERE Maps init =====
     var platform = new H.service.Platform({
       apikey: "YOUR_HERE_API_KEY"   // <-- substitui pela tua chave real
     });
 
-    var defaultLayers = platform.createDefaultLayers();
-
-    // Usa raster normal map (compatível em qualquer browser)
-    var map = new H.Map(
-      document.getElementById('mapContainer'),
-      defaultLayers.raster.normal.map,
-      {
-        zoom: 6,
-        center: { lat: 39.5, lng: -8.0 }
+    function makeMapBase(container) {
+      try {
+        const layers = platform.createDefaultLayers();
+        // tenta vector
+        const map = new H.Map(container, layers.vector.normal.map, {
+          zoom: 6, center: { lat: 39.5, lng: -8.0 }, pixelRatio: window.devicePixelRatio || 1
+        });
+        if (!map.getBaseLayer()) throw new Error("Vector base layer not available");
+        return map;
+      } catch (e) {
+        console.warn("Vector falhou, a tentar raster:", e);
+        try {
+          const layers = platform.createDefaultLayers();
+          const map = new H.Map(container, layers.raster.normal.map, {
+            zoom: 6, center: { lat: 39.5, lng: -8.0 }, pixelRatio: window.devicePixelRatio || 1
+          });
+          if (!map.getBaseLayer()) throw new Error("Raster base layer not available");
+          return map;
+        } catch (e2) {
+          console.warn("Raster HERE falhou, fallback OSM:", e2);
+          // Fallback público OSM (garante que pelo menos o basemap aparece)
+          const osmProvider = new H.map.provider.ImageTileProvider({
+            label: 'OSM', min: 0, max: 19,
+            getURL: function (col, row, level) {
+              return `https://tile.openstreetmap.org/${level}/${col}/${row}.png`;
+            }
+          });
+          const osmLayer = new H.map.layer.TileLayer(osmProvider);
+          return new H.Map(container, osmLayer, {
+            zoom: 6, center: { lat: 39.5, lng: -8.0 }, pixelRatio: window.devicePixelRatio || 1
+          });
+        }
       }
-    );
-
-    // Controlo de interação
-    var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
-    var ui = H.ui.UI.createDefault(map, defaultLayers);
-
-    // Fallback se a camada vector falhar
-    if (!map.getBaseLayer()) {
-      console.warn("Camada vectorial não carregada. A usar raster como fallback.");
-      map.setBaseLayer(defaultLayers.raster.normal.map);
     }
 
-    // --- Ler dados do parâmetro 'data' ---
-    const params = new URLSearchParams(window.location.search);
-    const dataParam = params.get("data");
+    const map = makeMapBase(document.getElementById('mapContainer'));
+    window.addEventListener('resize', () => map.getViewPort().resize());
+    const behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+    const ui = H.ui.UI.createDefault(map);
 
-    if (dataParam) {
-      try {
-        const data = JSON.parse(decodeURIComponent(dataParam));
-
-        if (!Array.isArray(data) || data.length === 0) {
-          console.warn("Sem dados de vendas para exibir.");
-          return;
-        }
-
-        // Converter para pontos {lat, lng, value}
-        const heatmapPoints = data.map(d => ({
-          lat: d.lat,
-          lng: d.lng,
-          value: d.total_vendas,
-          location: d.location || "Local desconhecido"
-        }));
-
-        // Normalizar os valores
-        const maxValue = Math.max(...heatmapPoints.map(p => p.value));
-        heatmapPoints.forEach(p => p.value = p.value / maxValue);
-
-        // Criar Heatmap Provider
-        const heatmapProvider = new H.data.heatmap.Provider({
-          colors: new H.data.heatmap.Colors({
-            0.0: 'rgba(0,0,255,0)',     // sem dados
-            0.3: 'rgba(0,255,255,0.6)', // ciano
-            0.5: 'rgba(255,255,0,0.7)', // amarelo
-            0.7: 'rgba(255,165,0,0.8)', // laranja
-            1.0: 'rgba(255,0,0,0.9)'    // vermelho intenso
-          }),
-          opacity: 0.85,
-          type: 'value',
-          assumeValues: false
-        });
-
-        heatmapProvider.addData(heatmapPoints);
-        const heatmapLayer = new H.map.layer.TileLayer(heatmapProvider);
-        map.addLayer(heatmapLayer);
-
-        // Adicionar círculos interativos por ponto
-        heatmapPoints.forEach(p => {
-          const circle = new H.map.Circle(
-            { lat: p.lat, lng: p.lng },
-            1500, // raio em metros
-            {
-              style: {
-                fillColor: 'rgba(255,0,0,0.2)',
-                strokeColor: 'rgba(255,0,0,0.5)',
-                lineWidth: 2
-              }
-            }
-          );
-
-          // Tooltip
-          circle.setData(`<b>${p.location}</b><br>Vendas: ${Math.round(p.value * maxValue)}`);
-          circle.addEventListener('tap', evt => {
-            const bubble = new H.ui.InfoBubble(evt.target.getGeometry(), {
-              content: evt.target.getData()
-            });
-            ui.addBubble(bubble);
-          });
-
-          map.addObject(circle);
-        });
-
-        // Centragem automática no conjunto de pontos
-        if (heatmapPoints.length > 1) {
-          const bounds = heatmapPoints.reduce(
-            (b, p) => b.extend({ lat: p.lat, lng: p.lng }),
-            new H.geo.Rect(
-              heatmapPoints[0].lat, heatmapPoints[0].lng,
-              heatmapPoints[0].lat, heatmapPoints[0].lng
-            )
-          );
-          map.getViewModel().setLookAtData({ bounds });
-        }
-
-      } catch (err) {
-        console.error("Erro ao processar os dados:", err);
-      }
+    // ===== Dados =====
+    const data = parseIncomingData(); // [{lat,lng,total_vendas,location?}, ...]
+    if (!data.length) {
+      console.warn("Sem dados para exibir. Verifica a construção do URL.");
     } else {
-      console.warn("Nenhum parâmetro 'data' recebido.");
+      // transforma
+      const pts = data.map(d => ({
+        lat: Number(d.lat),
+        lng: Number(d.lng),
+        value: Number(d.total_vendas || d.value || 0),
+        location: d.location || "Local"
+      })).filter(p => isFinite(p.lat) && isFinite(p.lng));
+
+      const maxVal = Math.max(1, ...pts.map(p => p.value));
+      const hmPoints = pts.map(p => ({ lat: p.lat, lng: p.lng, value: p.value / maxVal }));
+
+      // Heatmap
+      const hmProvider = new H.data.heatmap.Provider({
+        colors: new H.data.heatmap.Colors({
+          0.0: 'rgba(0,0,255,0)',     // transparente sem dados
+          0.3: 'rgba(0,255,255,0.6)',
+          0.5: 'rgba(255,255,0,0.7)',
+          0.7: 'rgba(255,165,0,0.8)',
+          1.0: 'rgba(255,0,0,0.9)'
+        }),
+        opacity: 0.85,
+        type: 'value',
+        assumeValues: false
+      });
+      hmProvider.addData(hmPoints);
+      map.addLayer(new H.map.layer.TileLayer(hmProvider));
+
+      // Círculos + tooltip
+      pts.forEach(p => {
+        const circle = new H.map.Circle({ lat: p.lat, lng: p.lng }, 1500, {
+          style: { fillColor: 'rgba(255,0,0,0.2)', strokeColor: 'rgba(255,0,0,0.5)', lineWidth: 2 }
+        });
+        circle.setData(`<b>${p.location}</b><br>Vendas: ${p.value}`);
+        circle.addEventListener('tap', evt => {
+          ui.addBubble(new H.ui.InfoBubble(evt.target.getGeometry(), { content: evt.target.getData() }));
+        });
+        map.addObject(circle);
+      });
+
+      // Ajusta ao conjunto
+      if (pts.length) {
+        const bounds = pts.reduce((b, p) => b.extend({ lat: p.lat, lng: p.lng }),
+          new H.geo.Rect(pts[0].lat, pts[0].lng, pts[0].lat, pts[0].lng));
+        map.getViewModel().setLookAtData({ bounds, margin: 40 });
+      }
     }
   </script>
 </body>

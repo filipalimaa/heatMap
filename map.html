@@ -1,16 +1,19 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt">
 <head>
   <meta charset="utf-8">
-  <title>Heatmap HERE Maps</title>
+  <title>Mapa de Calor - Vendas por Localidade</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-core.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-service.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-data.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-heatmap.js"></script>
+
+  <!-- HERE Maps -->
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-core.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-service.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-data.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-heatmap.js" type="text/javascript" charset="utf-8"></script>
   <link rel="stylesheet" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
+
   <style>
     html, body {
       width: 100%;
@@ -26,6 +29,13 @@
 </head>
 <body>
   <div id="mapContainer"></div>
+  <div class="legend">
+    <strong>Intensidade das Vendas</strong><br>
+    <span style="background:blue"></span> Baixa
+    <span style="background:yellow"></span> Média
+    <span style="background:red"></span> Alta
+  </div>
+
   <script>
     // Inicialização do mapa HERE
     var platform = new H.service.Platform({

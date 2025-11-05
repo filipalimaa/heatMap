@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <title>Heatmap de Vendas - Portugal</title>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; background: #ffffff; }
+    #chart { width: 100%; height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="chart"></div>
+  <script>
+    // 1️⃣ Ler dados do parâmetro ?data=
+    const params = new URLSearchParams(window.location.search);
+    const dataParam = params.get("data");
+    let sales = [];
+    try {
+      if (dataParam) sales = JSON.parse(decodeURIComponent(dataParam));
+    } catch (e) {
+      console.error("Erro ao ler ?data:", e);
+    }
+
+    // Mensagem visual se não houver dados
+    if (!Array.isArray(sales) || sales.length === 0) {
+      const warn = document.createElement("div");
+      warn.style.cssText = "position:fixed;top:8px;left:8px;background:#fff3cd;color:#664d03;padding:8px 12px;border:1px solid #ffe69c;border-radius:6px;font:14px/1.3 system-ui;";
+      warn.textContent = "Sem dados (?data vazio). Adiciona ?data=[...] ao URL ou verifica o iframe.";
+      document.body.appendChild(warn);
+    }
+
+    // 2️⃣ Converter dados
+    const points = (sales || []).map(d => [Number(d.lng), Number(d.lat), Number(d.total_vendas)]);
+    const values = points.map(p => p[2]).filter(v => Number.isFinite(v));
+    const vmin = values.length ? Math.min(...values) : 0;
+    const vmax = values.length ? Math.max(...values) : 1;
+
+    const chart = echarts.init(document.getElementById("chart"));
+
+    // 3️⃣ GeoJSON simplificado de Portugal (continente + ilhas)
+    const portugalGeoJSON = {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": { "name": "Portugal Continental" },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[
+              [-9.55, 36.95], [-9.55, 42.15], [-6.10, 42.15], [-6.10, 36.95], [-9.55, 36.95]
+            ]]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": { "name": "Açores" },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[
+              [-31.3, 36.8], [-24.9, 36.8], [-24.9, 40.1], [-31.3, 40.1], [-31.3, 36.8]
+            ]]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": { "name": "Madeira" },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[
+              [-17.3, 32.5], [-16.1, 32.5], [-16.1, 33.2], [-17.3, 33.2], [-17.3, 32.5]
+            ]]
+          }
+        }
+      ]
+    };
+
+    echarts.registerMap("portugal", portugalGeoJSON);
+
+    // 4️⃣ Opções do gráfico
+    const option = {
+      backgroundColor: "#ffffff",
+      title: { text: "Heatmap de Vendas - Portugal", left: "center" },
+      tooltip: {
+        position: "top",
+        formatter: p => {
+          if (!p || !p.value) return "";
+          return `Lat: ${(+p.value[1]).toFixed(4)}<br>Lng: ${(+p.value[0]).toFixed(4)}<br>Vendas: ${p.value[2]}`;
+        }
+      },
+      visualMap: {
+        min: vmin,
+        max: Math.max(vmax, 1),
+        calculable: true,
+        orient: "horizontal",
+        left: "center",
+        bottom: 10,
+        inRange: { color: ["#2b83ba", "#abdda4", "#ffffbf", "#fdae61", "#d7191c"] }
+      },
+      geo: {
+        map: "portugal",
+        roam: true,
+        zoom: 1.2,
+        center: [-8, 39.5],
+        itemStyle: {
+          areaColor: "#e9f2ff",
+          borderColor: "#8aa3bf"
+        },
+        emphasis: {
+          itemStyle: { areaColor: "#d7e8ff" }
+        }
+      },
+      series: [
+        {
+          name: "Vendas",
+          type: "heatmap",
+          coordinateSystem: "geo",
+          data: points,
+          blurSize: 25,
+          pointSize: 12,
+          opacity: 0.85
+        }
+      ]
+    };
+
+    chart.setOption(option);
+    window.addEventListener("resize", () => chart.resize());
+  </script>
+</body>
+</html>

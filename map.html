@@ -1,67 +1,94 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt">
 <head>
   <meta charset="utf-8">
-  <title>Heatmap HERE Maps</title>
+  <title>Mapa de Calor - Vendas por Localidade</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-core.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-service.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-data.js"></script>
-  <script src="https://js.api.here.com/v3/3.1/mapsjs-heatmap.js"></script>
+
+  <!-- HERE Maps -->
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-core.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-service.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-data.js" type="text/javascript" charset="utf-8"></script>
+  <script src="https://js.api.here.com/v3/3.1/mapsjs-heatmap.js" type="text/javascript" charset="utf-8"></script>
   <link rel="stylesheet" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
+
   <style>
-    html, body { width: 100%; height: 100%; margin: 0; }
-    #mapContainer { width: 100%; height: 100%; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      background: #f5f5f5;
+    }
+    #mapContainer {
+      width: 100%;
+      height: 100vh;
+    }
   </style>
 </head>
 <body>
   <div id="mapContainer"></div>
+  <div class="legend">
+    <strong>Intensidade das Vendas</strong><br>
+    <span style="background:blue"></span> Baixa
+    <span style="background:yellow"></span> Média
+    <span style="background:red"></span> Alta
+  </div>
+
   <script>
-    // substitui pela tua chave HERE Maps
+    // Inicialização do mapa HERE
     var platform = new H.service.Platform({
-      apikey: "gCsr9J1ANV4ejQht7wRVfUaKCi6MqloJUxjZJQqzC-E"
+      apikey: "YOUR_HERE_API_KEY"
     });
 
     var defaultLayers = platform.createDefaultLayers();
-
-    var map = new H.Map(document.getElementById('mapContainer'),
-      defaultLayers.vector.normal.map, {
+    var map = new H.Map(
+      document.getElementById('mapContainer'),
+      defaultLayers.vector.normal.map,
+      {
         zoom: 6,
-        center: { lat: 39.5, lng: -8.0 } // centro de Portugal
-      });
+        center: { lat: 39.5, lng: -8.0 }
+      }
+    );
 
-    // Enable map interactions
+    // Controles de interação
     var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
     var ui = H.ui.UI.createDefault(map, defaultLayers);
 
-    // === Dados recebidos do Appsmith ===
+    // Obter dados vindos do parâmetro "data"
     const params = new URLSearchParams(window.location.search);
-    const data = JSON.parse(decodeURIComponent(params.get("data")));
+    const dataParam = params.get("data");
 
-    // Converter para pontos de calor
-    const heatmapData = data.map(item => ({
-      lat: item.lat,
-      lng: item.lng,
-      value: item.total_vendas
-    }));
+    if (dataParam) {
+      try {
+        const data = JSON.parse(decodeURIComponent(dataParam));
 
-    // Criar heatmap layer
-    const heatmapProvider = new H.data.heatmap.Provider({
-      colors: new H.data.heatmap.Colors({
-        0.0: 'blue',
-        0.5: 'yellow',
-        1.0: 'red'
-      }),
-      opacity: 0.7,
-      assumeValues: true
-    });
+        const heatmapPoints = data.map(d => ({
+          lat: d.lat,
+          lng: d.lng,
+          value: d.total_vendas
+        }));
 
-    heatmapProvider.addData(heatmapData);
-    const heatmapLayer = new H.map.layer.TileLayer(heatmapProvider);
+        const heatmapProvider = new H.data.heatmap.Provider({
+          colors: new H.data.heatmap.Colors({
+            0.0: 'blue',
+            0.5: 'yellow',
+            1.0: 'red'
+          }),
+          opacity: 0.7,
+          assumeValues: true
+        });
 
-    map.addLayer(heatmapLayer);
+        heatmapProvider.addData(heatmapPoints);
+        const heatmapLayer = new H.map.layer.TileLayer(heatmapProvider);
+        map.addLayer(heatmapLayer);
+      } catch (e) {
+        console.error("Erro ao processar dados:", e);
+      }
+    } else {
+      console.warn("Nenhum dado recebido.");
+    }
   </script>
 </body>
 </html>

@@ -12,72 +12,89 @@
 <body>
   <div id="chart"></div>
   <script>
-    // =========================================
-    // 1️⃣ Ler dados recebidos no parâmetro ?data=
-    // =========================================
-    const params = new URLSearchParams(window.location.search);
-    const dataParam = params.get("data");
-    let sales = [];
-    if (dataParam) {
-      try {
-        sales = JSON.parse(decodeURIComponent(dataParam));
-      } catch (e) { console.error("Erro ao ler dados:", e); }
-    }
+  const params = new URLSearchParams(window.location.search);
+  const dataParam = params.get("data");
+  let sales = [];
+  if (dataParam) {
+    try {
+      sales = JSON.parse(decodeURIComponent(dataParam));
+    } catch (e) { console.error("Erro ao ler dados:", e); }
+  }
+  console.log("Dados recebidos:", sales);
 
-    // =========================================
-    // 2️⃣ Transformar dados no formato do ECharts
-    // =========================================
-    const points = sales.map(d => [Number(d.lng), Number(d.lat), Number(d.total_vendas)]);
-    const values = points.map(p => p[2]);
-    const vmin = values.length ? Math.min(...values) : 0;
-    const vmax = values.length ? Math.max(...values) : 1;
+  const points = sales.map(d => [Number(d.lng), Number(d.lat), Number(d.total_vendas)]);
+  const values = points.map(p => p[2]);
+  const vmin = values.length ? Math.min(...values) : 0;
+  const vmax = values.length ? Math.max(...values) : 1;
 
-    // =========================================
-    // 3️⃣ Criar o gráfico
-    // =========================================
-    const chart = echarts.init(document.getElementById("chart"));
+  const chart = echarts.init(document.getElementById("chart"));
 
-    const option = {
-      backgroundColor: "#ffffff",
-      title: { text: "Heatmap de Vendas", left: "center" },
-      tooltip: {
-        position: "top",
-        formatter: p => `Lat: ${p.value[1].toFixed(4)}<br>Lng: ${p.value[0].toFixed(4)}<br>Vendas: ${p.value[2]}`
-      },
-      visualMap: {
-        min: vmin,
-        max: vmax,
-        calculable: true,
-        orient: "horizontal",
-        left: "center",
-        bottom: 10,
-        inRange: {
-          color: ["#2b83ba", "#abdda4", "#ffffbf", "#fdae61", "#d7191c"]
+  // 🔹 GeoJSON simplificado de Portugal continental
+  const portugal = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { name: "Portugal" },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[
+            [-9.55, 36.95],
+            [-9.55, 42.15],
+            [-6.10, 42.15],
+            [-6.10, 36.95],
+            [-9.55, 36.95]
+          ]]
         }
-      },
-      geo: {
-        map: "world",
-        roam: true,
-        silent: true,
-        zoom: 4.5,
-        center: [-8, 39.5],
-        itemStyle: { areaColor: "#f0f0f0", borderColor: "#999" },
-        emphasis: { itemStyle: { areaColor: "#e6f2ff" } }
-      },
-      series: [
-        {
-          type: "heatmap",
-          coordinateSystem: "geo",
-          data: points,
-          blurSize: 20,
-          pointSize: 10,
-          opacity: 0.85
-        }
-      ]
-    };
+      }
+    ]
+  };
 
-    chart.setOption(option);
-    window.addEventListener("resize", () => chart.resize());
+  echarts.registerMap("portugal", portugal);
+
+  const option = {
+    backgroundColor: "#ffffff",
+    title: { text: "Heatmap de Vendas", left: "center" },
+    tooltip: {
+      position: "top",
+      formatter: p => `Lat: ${p.value[1]}<br>Lng: ${p.value[0]}<br>Vendas: ${p.value[2]}`
+    },
+    visualMap: {
+      min: vmin,
+      max: vmax,
+      calculable: true,
+      orient: "horizontal",
+      left: "center",
+      bottom: 10,
+      inRange: {
+        color: ["#2b83ba", "#abdda4", "#ffffbf", "#fdae61", "#d7191c"]
+      }
+    },
+    geo: {
+      map: "portugal",
+      roam: true,
+      zoom: 1.1,
+      center: [-8, 39.5],
+      itemStyle: {
+        areaColor: "#f0f0f0",
+        borderColor: "#999"
+      },
+      emphasis: { itemStyle: { areaColor: "#e6f2ff" } }
+    },
+    series: [
+      {
+        type: "heatmap",
+        coordinateSystem: "geo",
+        data: points,
+        blurSize: 20,
+        pointSize: 10,
+        opacity: 0.85
+      }
+    ]
+  };
+
+  chart.setOption(option);
+  window.addEventListener("resize", () => chart.resize());
   </script>
 </body>
 </html>

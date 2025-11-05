@@ -118,11 +118,18 @@
         if (!b) return new H.geo.Rect(p.lat, p.lng, p.lat, p.lng);
         b.mergePoint(p.lat, p.lng); return b;
       }, null);
-      if (rect) map.getViewModel().setLookAtData({ bounds: rect });
+      if (rect) {
+        map.getViewModel().setLookAtData({ bounds: rect });
+        setTimeout(() => {
+            const vm = map.getViewModel();
+            vm.setLookAtData({
+            position: vm.getLookAtData().position,
+            zoom: vm.getLookAtData().zoom + 0.8  // aumenta zoom (ajusta o valor conforme quiseres)
+            });
+        }, 500);
     }
+}
 
-    // --------- 7) Opcional: botões de estilo ----------
-    // ui.getControl('mapsettings') já traz “mapa/satélite/terrain” no HERE
   </script>
 </body>
 </html>
